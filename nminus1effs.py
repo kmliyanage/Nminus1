@@ -13,19 +13,25 @@ if miniAOD:
 else:
     from SUSYBSMAnalysis.Zprime2muAnalysis.HistosFromPAT_cfi import HistosFromPAT
 
-from SUSYBSMAnalysis.Zprime2muAnalysis.OurSelection2018_cff import loose_cut, trigger_match, tight_cut, allDimuons
+from SUSYBSMAnalysis.Zprime2muAnalysis.OurSelection2018_cff import loose_cut, trigger_match, trigger_match_2018, tight_cut, allDimuons
+
+from SUSYBSMAnalysis.Zprime2muAnalysis.hltTriggerMatch_cfi import trigger_filters, trigger_path_names, trigger_path_full_names, trigger_filters_pt
+
+
+print trigger_match_2018 + "kal"
 
 #### METFilterMiniAOD_cfi.py
 #### src = cms.InputTag("TriggerResults","","RECO"), #### instead of PAT
 
-eadFiles = cms.untracked.vstring()
+readFiles = cms.untracked.vstring()
 secFiles = cms.untracked.vstring()
 #process.source = cms.Source ("PoolSource",fileNames = readFiles, secondaryFileNames = secFiles)
 
 process.source = cms.Source ("PoolSource",
                              fileNames =  cms.untracked.vstring(
                                                                 
-                                                                '/store/data/Run2018B/SingleMuon/MINIAOD/17Sep2018-v1/60000/3477F4CF-2EA9-3742-9914-331240EC0D4C.root',
+                                                                '/store/mc/RunIIAutumn18MiniAOD/ZToMuMu_NNPDF31_13TeV-powheg_M_400_800/MINIAODSIM/102X_upgrade2018_realistic_v15-v2/120000/3CAC2BED-8D6D-0648-8AFD-1B80FA5A4D15.root',
+                                                                #                                                                '/store/data/Run2018B/SingleMuon/MINIAOD/17Sep2018-v1/60000/3477F4CF-2EA9-3742-9914-331240EC0D4C.root',
                                                                 #                                                                 '/store/data/Run2016B/SingleMuon/MINIAOD/23Sep2016-v3/00000/162AD1DB-1E98-E611-9893-008CFA56D58C.root',
                                                                 #'/store/data/Run2016B/SingleMuon/MINIAOD/23Sep2016-v3/00000/1A1F07FF-2698-E611-915C-0242AC130004.root'
                                                                 ),
@@ -36,7 +42,9 @@ process.source = cms.Source ("PoolSource",
 secFiles.extend( [
                 ] )
 process.maxEvents.input = -1
-process.GlobalTag.globaltag ='dummy' # dummy value to be changed below
+process.GlobalTag.globaltag ='102X_upgrade2018_realistic_v15' # DY 102 2018 MC
+#process.GlobalTag.globaltag = '102X_dataRun2_Sep2018Rereco_v1'
+#process.GlobalTag.globaltag ='dummy' # dummy value to be changed below
 #process.MessageLogger.cerr.FwkReport.reportEvery = 1 # default 1000
 
 # Define the numerators and denominators, removing cuts from the
@@ -77,22 +85,44 @@ for name, cut in cuts:
 
 process.allDimuonsNoNo      = allDimuons.clone(cut = 'daughter(0).pdgId() + daughter(1).pdgId() == 0')
 #process.allDimuonsNoNo      = allDimuons.clone(tight_cut = tight_cut.replace(trigger_match, ''))#N-2
-process.allDimuonsNoTrgMtch = allDimuons.clone(cut = 'daughter(0).pdgId() + daughter(1).pdgId() == 0', tight_cut = tight_cut.replace(trigger_match, ''))
+process.allDimuonsNoTrgMtch = allDimuons.clone(cut = 'daughter(0).pdgId() + daughter(1).pdgId() == 0', tight_cut = tight_cut.replace(trigger_match_2018, ''))
 
 alldimus = [x for x in dir(process) if 'allDimuonsNo' in x or 'allDimuonsTi' in x]
+
+
 
 # Sanity check that the replaces above did something.
 for x in alldimus:
     if 'NoNo' in x:
         continue
     o = getattr(process, x)
+    #print '*******************'
+    #print x
+    #print '*******************'
+    #print 'l_s',loose_cut
+    #print '*******************'
+    #print 'l_m',o.loose_cut.value()
+    #print '*******************'
+    #print 't_s',tight_cut
+    #print '*******************'
+    #print 't_m',o.tight_cut.value()
     assert o.loose_cut.value() != loose_cut or o.tight_cut.value() != tight_cut
 
 if miniAOD:
     process.load('SUSYBSMAnalysis.Zprime2muAnalysis.DileptonPreselector_cfi')####?????
     process.load("SUSYBSMAnalysis.Zprime2muAnalysis.EventCounter_cfi")
+    
     process.leptons = process.leptonsMini.clone()
-    process.p = cms.Path(process.egmGsfElectronIDSequence*process.EventCounter * process.dileptonPreseletor * process.muonPhotonMatchMiniAOD * process.leptons * reduce(lambda x,y: x*y, [getattr(process, x) for x in alldimus]))
+    
+    if len(trigger_filters)>0:
+        process.leptons.trigger_filters = trigger_filters
+        process.leptons.trigger_path_names = trigger_path_names
+        process.leptons.trigger_path_full_names = trigger_path_full_names
+    #process.leptons.prescaled_trigger_filters = prescaled_trigger_filters
+    #process.leptons.prescaled_trigger_path_names = prescaled_trigger_path_names
+    #process.leptons.prescaled_trigger_path_full_names = prescaled_trigger_path_full_names
+    
+    process.p = cms.Path(process.egmGsfElectronIDSequence*process.EventCounter * process.dileptonPreselector * process.muonPhotonMatchMiniAOD * process.leptons * reduce(lambda x,y: x*y, [getattr(process, x) for x in alldimus]))
     process.load('SUSYBSMAnalysis.Zprime2muAnalysis.goodData_cff')
     for dataFilter in goodDataFiltersMiniAOD:
         process.p *= dataFilter
@@ -100,7 +130,7 @@ else:
     process.leptons = process.leptons.clone()
     process.p = cms.Path(process.goodDataFilter * process.muonPhotonMatch * process.leptons * reduce(lambda x,y: x*y, [getattr(process, x) for x in alldimus]))
 
-
+print "step 1"
 
 # For all the allDimuons producers, make dimuons producers, and
 # analyzers to make the histograms.
@@ -111,6 +141,8 @@ for alld in alldimus:
     hists = HistosFromPAT.clone(dilepton_src = name, leptonsFromDileptons = True)
     setattr(process, name.replace('dimuons', ''), hists)
     process.p *= dimu * hists
+
+print "step 2"
 
 # Handle the cuts that have to be applied at the
 # Zprime2muCompositeCandidatePicker level.
@@ -141,6 +173,9 @@ delattr(process.dimuonsNoCosm, 'back_to_back_cos_angle_min')
 process.NoCosm = HistosFromPAT.clone(dilepton_src = 'dimuonsNoCosm', leptonsFromDileptons = True)
 process.p *= process.allDimuonsNoCosm * process.dimuonsNoCosm * process.NoCosm
 
+print "step 3"
+
+
 if __name__ == '__main__' and 'submit' in sys.argv:
     crab_cfg = \
 '''
@@ -160,12 +195,12 @@ if __name__ == '__main__' and 'submit' in sys.argv:
     config.Site.whitelist = ["T2_CH_CERN"]
     config.Site.storageSite = 'T2_CH_CERN'
     '''
-        
-        just_testing = 'testing' in sys.argv
-            extra = '_'+ex if ex!='' else ''
-if not 'no_data' in sys.argv:
-    # Set crab_cfg for DATA.
-    from SUSYBSMAnalysis.Zprime2muAnalysis.goodlumis import *
+        print "step 4"
+            just_testing = 'testing' in sys.argv
+extra = '_'+ex if ex!='' else ''
+    if not 'no_data' in sys.argv:
+        # Set crab_cfg for DATA.
+        from SUSYBSMAnalysis.Zprime2muAnalysis.goodlumis import *
         dataset_details = [
                            # Prompt Reco for ABC
                            # PPD recommendation to use 17Sep2018 ReReco for ABC, Prompt for D
@@ -228,7 +263,7 @@ if not 'no_mc' in sys.argv:
             ana_dataset = sample.dataset
             
             new_py = open('nminus1effs.py').read()
-            new_py += "\nprocess.GlobalTag.globaltag = '102X_upgrade2018_realistic_v12'\n"  #### RunH
+            new_py += "\nprocess.GlobalTag.globaltag = '102X_upgrade2018_realistic_v15'\n"  #### RunH
             open('nminus1effs_crab.py', 'wt').write(new_py)
             
             new_crab_cfg = crab_cfg % locals()
@@ -244,3 +279,6 @@ if not 'no_mc' in sys.argv:
         if not just_testing:
             os.system('crab submit -c crabConfig.py')
             os.system('rm crabConfig.py nminus1effs_crab.py nminus1effs_crab.pyc')
+
+
+print "finished"                
